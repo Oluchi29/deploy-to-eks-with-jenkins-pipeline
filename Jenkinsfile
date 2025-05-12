@@ -1,79 +1,70 @@
-#!/usr/bin/env groovy
+
+
 pipeline {
     agent any
+
     environment {
-        AWS_ACCESS_KEY_ID = credentials('Access Key ID')
-        AWS_SECRET_ACCESS_KEY = credentials('Secret Access Key')
         AWS_DEFAULT_REGION = "us-east-1"
     }
-     parameters {
-        
-        
-        choice choices: ['apply', 'destroy'], description: '''Choose your terraform action
-        ''', name: 'action'
-    }
-    stages {
-         stage("Terraform init stage"){
-            steps {
-                script {
-                    dir('terraform1') {
-                       sh'terraform init'
-                       sh'terraform fmt'
-                       sh'terraform validate'
-                    }
-                }
-            }
-        }
-        stage("Create an EKS Cluster") {
-             when {
-                expression {
-                    //return params.Appenv
-                    return params.action=="apply"
-                }
-            }
-            steps {
-                script {
-                    dir('terraform1') {
-                        echo "You are about to ${params.action} to create the aws eks cluster"
-                        
-                       
-                        sh'terraform ${action} --auto-approve'
-                    }
-                }
-            }
-        }
-        stage("Destroy the Aws EKS Cluster") {
-             when {
-                expression {
-                    //return params.Appenv
-                    return params.action=="destroy"
-                }
-            }
-            steps {
-                script {
-                    dir('terraform1') {
 
-                        echo "You are about to ${params.action} the aws eks cluster and its resources"
-                        
-                       
-                        sh'terraform ${action} --auto-approve'
+    parameters {
+        choice(
+            name: 'action',
+            choices: ['apply', 'destroy'],
+            description: 'Choose your Terraform action'
+        )
+    }
+
+    stages {
+        stage("Terraform Init") {
+            steps {
+                dir('terraform1') {
+                    sh 'terraform init'
+                    sh 'terraform fmt'
+                    sh 'terraform validate'
+                }
+            }
+        }
+
+        stage("Terraform ${params.action.capitalize()} EKS Cluster") {
+            steps {
+                dir('terraform1') {
+                    script {
+                        withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-eks-creds']]) {
+                            echo "You are about to run terraform ${params.action} to manage the EKS cluster"
+                            sh "terraform ${params.action} --auto-approve"
+                        }
                     }
                 }
             }
         }
+
         stage("Deploy to EKS") {
+            when {
+                expression { return params.action == 'apply' }
+            }
             steps {
-                script {
-                    dir('kubernetes') {
-                        sh "aws eks update-kubeconfig --name my-eks-cluster-209"
-                        sh 'kubectl config current-context'
-                        sh 'eksctl get cluster'
-                        sh "kubectl get ns"
-                        sh "kubectl apply -f nginx-deployment.yaml"
-                        sh "kubectl apply -f nginx-service.yaml"
+                dir('kubernetes') {
+                    script {
+                        withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-eks-creds']]) {
+                            sh "aws eks update-kubeconfig --region us-east-1 --name my-eks-cluster-209"
+                            sh "kubectl config current-context"
+                            sh "kubectl get ns"
+                            sh "kubectl apply -f nginx-deployment.yaml"
+                            sh "kubectl apply -f nginx-service.yaml"
+                        }
                     }
                 }
             }
+        }
+    }
+
+    post {
+        success {
+            echo "✅ Terraform ${params.action} and EKS deployment completed successfully."
+        }
+        failure {
+            echo "❌ Pipeline failed during ${params.action}. Please review the logs."
         }
     }
 }
