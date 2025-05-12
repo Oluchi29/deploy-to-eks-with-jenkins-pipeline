@@ -17,18 +17,22 @@ pipeline {
         stage("Terraform Init") {
             steps {
                 dir('terraform') {
-                    sh 'terraform init'
-                    sh 'terraform fmt'
-                    sh 'terraform validate'
+                    script {
+                        withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-eks-creds']]) {
+                            sh 'terraform init'
+                            sh 'terraform fmt'
+                            sh 'terraform validate'
+                        }
+                    }
                 }
             }
         }
 
-        stage("Terraform Action: Apply or Destroy") {
+        stage("Terraform Apply or Destroy") {
             steps {
-                dir('terraform1') {
+                dir('terraform') {
                     script {
-                        echo "Selected action: ${params.action}"
+                        echo "Running terraform ${params.action}"
                         withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-eks-creds']]) {
                             sh "terraform ${params.action} --auto-approve"
                         }
