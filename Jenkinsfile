@@ -1,5 +1,3 @@
-
-
 pipeline {
     agent any
 
@@ -18,7 +16,7 @@ pipeline {
     stages {
         stage("Terraform Init") {
             steps {
-                dir('terraform1') {
+                dir('terraform') {
                     sh 'terraform init'
                     sh 'terraform fmt'
                     sh 'terraform validate'
@@ -26,12 +24,12 @@ pipeline {
             }
         }
 
-        stage("Terraform ${params.action.capitalize()} EKS Cluster") {
+        stage("Terraform Action: Apply or Destroy") {
             steps {
                 dir('terraform1') {
                     script {
+                        echo "Selected action: ${params.action}"
                         withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-eks-creds']]) {
-                            echo "You are about to run terraform ${params.action} to manage the EKS cluster"
                             sh "terraform ${params.action} --auto-approve"
                         }
                     }
