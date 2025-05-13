@@ -2,9 +2,11 @@ pipeline {
     agent any
 
     environment {
-        AWS_DEFAULT_REGION = "us-east-1"
+        AWS_ACCESS_KEY_ID = credentials('AWS_ACCESS_KEY_ID')
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
+        
+    
     }
-
     parameters {
         choice(
             name: 'action',
@@ -51,7 +53,7 @@ pipeline {
                         withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-eks-creds']]) {
                             sh "aws eks update-kubeconfig --region us-east-1 --name my-eks-cluster-200"
                             sh "kubectl config current-context"
-                            sh "kubectl get ns"
+                            sh "kubectl get pods"
                             sh "kubectl apply -f nginx-deployment.yaml"
                             sh "kubectl apply -f nginx-service.yaml"
                         }
