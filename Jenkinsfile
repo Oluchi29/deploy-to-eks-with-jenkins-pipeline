@@ -8,7 +8,7 @@ pipeline {
     }
         
     
-    }
+    
     parameters {
         choice(
             name: 'action',
