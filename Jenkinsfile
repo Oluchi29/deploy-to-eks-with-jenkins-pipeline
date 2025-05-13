@@ -6,9 +6,7 @@ pipeline {
         AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
         AWS_DEFAULT_REGION = "us-east-1"
     }
-        
-    
-    
+
     parameters {
         choice(
             name: 'action',
@@ -21,32 +19,34 @@ pipeline {
         stage("Terraform Init") {
             steps {
                 dir('terraform-new') {
-                    script {
-                       // withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-eks-creds']]) {
-                            sh 'terraform init'
-                        }
-                    }
+                    sh 'terraform init'
                 }
             }
-             stage("Terraform fmt") {
-            steps {
-                dir('terraform-new') {
-                    script {
-                       // withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-eks-creds']]) {
-                            sh 'terraform fmt'
-                        }
-                    }
-                }
-            }
-             stage("Terraform validate") {
-            steps {
-                dir('terraform-new') {
-                    script {
-                       // withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-eks-creds']]) {
+        }
 
-                            sh 'terraform validate'
-                        }
-                    }
+        stage("Terraform Format") {
+            steps {
+                dir('terraform-new') {
+                    sh 'terraform fmt'
+                }
+            }
+        }
+
+        stage("Terraform Validate") {
+            steps {
+                dir('terraform-new') {
+                    sh 'terraform validate'
+                }
+            }
+        }
+
+        stage("Terraform Plan") {
+            when {
+                expression { return params.action == 'apply' }
+            }
+            steps {
+                dir('terraform-new') {
+                    sh 'terraform plan'
                 }
             }
         }
@@ -54,12 +54,8 @@ pipeline {
         stage("Terraform Apply or Destroy") {
             steps {
                 dir('terraform-new') {
-                    script {
-                        echo "Running terraform ${params.action}"
-                     // withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-eks-creds']]) {
-                            sh "terraform ${params.action} --auto-approve"
-                        }
-                    }
+                    echo "Running terraform ${params.action}"
+                    sh "terraform ${params.action} --auto-approve"
                 }
             }
         }
@@ -70,18 +66,14 @@ pipeline {
             }
             steps {
                 dir('kubernetes') {
-                    script {
-                      //  withCredentials([[$class: 'AmazonWebServicesCredentialsBinding', credentialsId: 'aws-eks-creds']]) {
-                            sh "aws eks update-kubeconfig --region us-east-1 --name my-eks-cluster-200"
-                            sh "kubectl config current-context"
-                            sh "kubectl get pods"
-                            sh "kubectl apply -f nginx-deployment.yaml"
-                            sh "kubectl apply -f nginx-service.yaml"
-                        }
-                    }
+                    sh "aws eks update-kubeconfig --region us-east-1 --name my-eks-cluster-200"
+                    sh "kubectl config current-context"
+                    sh "kubectl get pods"
+                    sh "kubectl apply -f nginx-deployment.yaml"
+                    sh "kubectl apply -f nginx-service.yaml"
                 }
             }
-        
+        }
     }
 
     post {
