@@ -66,38 +66,7 @@ pipeline {
             }
         }
 
-stage("Force Cleanup AWS Resources") {
-    when {
-        expression { return params.action == 'destroy' }
-    }
-    steps {
-        script {
-            sh '''
-            echo "Updating kubeconfig..."
-            aws eks update-kubeconfig --region us-east-1 --name my-eks-cluster-200 || true
-
-            echo "Deleting Kubernetes resources..."
-            kubectl delete -f kubernetes/nginx-service.yaml --ignore-not-found
-            kubectl delete -f kubernetes/nginx-deployment.yaml --ignore-not-found
-
-            echo "Deleting services of type LoadBalancer..."
-            kubectl delete svc --all --ignore-not-found
-            kubectl delete ingress --all --ignore-not-found
-
-            echo "Deleting all node groups (if managed outside Terraform)..."
-            aws eks list-nodegroups --cluster-name my-eks-cluster-200 --query 'nodegroups' --output text | tr '\t' '\n' | while read nodegroup; do
-                aws eks delete-nodegroup --cluster-name my-eks-cluster-200 --nodegroup-name "$nodegroup"
-            done
-
-            echo "Waiting for node group deletion to propagate..."
-            sleep 60
-
-            echo "You can also manually clean ENIs here if necessary using:"
-            echo "aws ec2 describe-network-interfaces --filters Name=vpc-id,Values=<your-vpc-id>"
-            '''
-        }
-    }
-}
+            
 
         stage("Terraform Apply or Destroy") {
             steps {
