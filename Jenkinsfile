@@ -51,6 +51,21 @@ pipeline {
             }
         }
 
+        stage("Delete Kubernetes Workloads") {
+            when {
+                expression { return params.action == 'destroy' }
+            }
+            steps {
+                dir('kubernetes') {
+                    script {
+                        sh "aws eks update-kubeconfig --region us-east-1 --name my-eks-cluster-200 || true"
+                        sh "kubectl delete -f nginx-service.yaml || true"
+                        sh "kubectl delete -f nginx-deployment.yaml || true"
+                    }
+                }
+            }
+        }
+
         stage("Terraform Apply or Destroy") {
             steps {
                 dir('terraform-new') {
