@@ -1,25 +1,21 @@
 pipeline {
     agent any
 
-    parameters {
-        booleanParam(name: 'CLEANUP', defaultValue: false, description: 'Destroy infrastructure after deployment')
-        choice(
-            name: 'WAIT_MINUTES',
-            choices: ['0', '1', '5', '10', '15', '30'],
-            description: 'Time to wait (in minutes) before destroying infrastructure'
-        )
+    environment {
+        AWS_ACCESS_KEY_ID     = credentials('AWS_ACCESS_KEY_ID')
+        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
+        AWS_DEFAULT_REGION    = 'us-east-1'
+        TF_VAR_project_name   = 'eks-terraform-deploy'
+        K8S_MANIFEST_PATH     = 'k8s'
+        TERRAFORM_DIR         = 'terraform-update'  // <-- Define your Terraform path here
     }
 
-    environment {
-        AWS_ACCESS_KEY_ID = credentials('AWS_ACCESS_KEY_ID')
-        AWS_SECRET_ACCESS_KEY = credentials('AWS_SECRET_ACCESS_KEY')
-        AWS_DEFAULT_REGION = 'us-east-1'
-        TF_VAR_project_name = 'eks-terraform-deploy' // 🔁 Replace with your actual project name
-        K8S_MANIFEST_PATH = 'k8s'
+    parameters {
+        booleanParam(name: 'CLEANUP', defaultValue: false, description: 'Destroy infrastructure after deployment')
+        choice(name: 'WAIT_TIME_MINUTES', choices: ['0', '5', '10', '15', '30'], description: 'Minutes to wait before cleanup')
     }
 
     stages {
-
         stage('Checkout Code') {
             steps {
                 git branch: 'main', url: 'https://github.com/Oluchi29/deploy-to-eks-with-jenkins-pipeline.git'
@@ -28,45 +24,60 @@ pipeline {
 
         stage('Terraform Init') {
             steps {
-                dir('terraform') {
+                dir("${env.TERRAFORM_DIR}") {
                     sh 'terraform init'
                 }
             }
         }
 
-        stage('Terraform Fmt & Validate') {
+        stage('Terraform Format & Validate') {
             steps {
-                dir('terraform') {
-                    sh 'terraform fmt -check'
-                    sh 'terraform validate'
+                dir("${env.TERRAFORM_DIR}") {
+                    sh '''
+                        terraform fmt
+                        terraform fmt -check
+                        terraform validate
+                    '''
+                }
+            }
+        }
+
+        stage('Terraform Plan') {
+            steps {
+                dir("${env.TERRAFORM_DIR}") {
+                    sh 'terraform plan'
                 }
             }
         }
 
         stage('Terraform Apply - Create EKS') {
             steps {
-                dir('terraform-update') {
+                dir("${env.TERRAFORM_DIR}") {
                     sh 'terraform apply -auto-approve'
+                }
+            }
+        }
+
+        stage('Set Cluster Name') {
+            steps {
+                script {
+                    def clusterName = sh(
+                        script: "terraform -chdir=${env.TERRAFORM_DIR} output -raw cluster_name",
+                        returnStdout: true
+                    ).trim()
+                    env.EKS_CLUSTER_NAME = clusterName
+                    echo "EKS Cluster Name: ${clusterName}"
                 }
             }
         }
 
         stage('Configure kubectl') {
             steps {
-                script {
-                    def clusterName = sh(
-                        script: 'terraform -chdir=terraform output -raw cluster_name',
-                        returnStdout: true
-                    ).trim()
-
-                    env.EKS_CLUSTER_NAME = clusterName
-
-                    sh """
-                        aws eks update-kubeconfig \
-                            --region $AWS_DEFAULT_REGION \
-                            --name ${clusterName}
-                    """
-                }
+                sh """
+                    aws eks update-kubeconfig \
+                        --region ${env.AWS_DEFAULT_REGION} \
+                        --name ${env.EKS_CLUSTER_NAME}
+                """
             }
         }
 
@@ -87,13 +98,13 @@ pipeline {
 
         stage('Wait Before Destroy (Optional)') {
             when {
-                expression { return params.CLEANUP && params.WAIT_MINUTES.toInteger() > 0 }
+                expression { return params.CLEANUP && params.WAIT_TIME_MINUTES.toInteger() > 0 }
             }
             steps {
                 script {
-                    def waitTime = params.WAIT_MINUTES.toInteger()
-                    echo "⏳ Waiting ${waitTime} minutes before cleanup..."
-                    sleep time: waitTime, unit: 'MINUTES'
+                    def waitSeconds = params.WAIT_TIME_MINUTES.toInteger() * 60
+                    echo "⏳ Waiting for ${params.WAIT_TIME_MINUTES} minutes before cleanup..."
+                    sleep time: waitSeconds, unit: 'SECONDS'
                 }
             }
         }
@@ -103,7 +114,7 @@ pipeline {
                 expression { return params.CLEANUP }
             }
             steps {
-                dir('terraform') {
+                dir("${env.TERRAFORM_DIR}") {
                     sh 'terraform destroy -auto-approve'
                 }
             }
@@ -112,10 +123,13 @@ pipeline {
 
     post {
         always {
-            echo '✅ Pipeline execution completed.'
+            echo '📦 Pipeline execution completed.'
         }
         failure {
             echo '❌ Pipeline failed. Check logs for errors.'
+        }
+        success {
+            echo '✅ All stages completed successfully.'
         }
     }
 }
