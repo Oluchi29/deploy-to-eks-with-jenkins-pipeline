@@ -103,7 +103,7 @@ pipeline {
             steps {
                 script {
                     def waitSeconds = params.WAIT_TIME_MINUTES.toInteger() * 60
-                    echo "⏳ Waiting for ${params.WAIT_TIME_MINUTES} minutes before cleanup..."
+                    echo " Waiting for ${params.WAIT_TIME_MINUTES} minutes before cleanup..."
                     sleep time: waitSeconds, unit: 'SECONDS'
                 }
             }
@@ -123,13 +123,13 @@ pipeline {
 
     post {
         always {
-            echo '📦 Pipeline execution completed.'
+            echo ' Pipeline execution completed.'
         }
         failure {
-            echo '❌ Pipeline failed. Check logs for errors.'
+            echo 'Pipeline failed. Check logs for errors.'
         }
         success {
-            echo '✅ All stages completed successfully.'
+            echo ' All stages completed successfully.'
         }
     }
 }
